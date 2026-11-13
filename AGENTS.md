@@ -4,6 +4,9 @@
 user folder. A server owns all file IO and exposes it to clients (TUIs, quick-capture
 modals) and to agents (MCP).
 
+**Read [VISION.md](VISION.md) first.** It holds the original idea, the owner's reasons,
+and how they want to work. This file covers the implementation.
+
 ## Ground rules
 
 - **Keep it lean.** Build what has been agreed; propose extras and wait for a yes.
