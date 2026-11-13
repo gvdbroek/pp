@@ -32,10 +32,20 @@ server/                 Python package `pa_server` (stdlib only), command `pa-se
     httpapi.py          JSON-over-HTTP API + server-sent events, token auth
     cli.py              `pa-server serve`, `pa-server token`
   tests/                unittest (no pytest dependency)
+clients/
+  tui/                  Python package `pa_tui` (stdlib curses; `windows-curses` on Windows)
+    src/pa_tui/
+      api.py            HTTP client: discovery via .server/.token, requests, SSE listener
+      ui.py             curses helpers: clipped drawing, line prompt, list picker, $EDITOR
+      app.py            shared view loop: vim key sequences, live reload, status line
+      todos.py          `pa-todos [project]`
+      notes.py          `pa-notes [project]`
+    tests/              unit tests + integration tests against a real server
+                        (imports ../../server/src)
 ```
 
-Planned sub-projects (not started, names not final): TUI clients (todos window, notes
-window), modal clients.
+Planned (not started): `clients/` modals. For now the README shows how to build a
+modal yourself with a small script that posts to `/capture`.
 
 ## Data layout
 
@@ -131,7 +141,23 @@ more lines...
 | Single notes log per project | Append-only is trivial and conflict-free; split later only if needed. |
 | HTTP on loopback + token | Universally scriptable; SSE gives push updates; MCP's network transport is HTTP. |
 | Modals are separate, swappable clients | Windows AV may force different modal implementations per OS. |
+| curses for the TUIs | Few files to scan at startup; the views are simple. |
 | Drop-folder capture | Built, then removed: not needed now. Don't re-add unasked. |
+
+## TUI clients
+
+- **curses, not Textual:** chosen to stay lean. Textual would read hundreds of files at
+  every start under the Windows AV; the views are just lists with vim keys plus
+  `$EDITOR`, which curses handles fine.
+- Each window is its own process and HTTP client; open as many as you like. Each
+  listens to `/events` and reloads when its project/kind changes (also after
+  reconnecting, since events may have been missed).
+- Every mutation sends `expect` (the item text it acted on). On 409 the view reloads and
+  shows the error, so a stale screen can't edit the wrong item.
+- Editing text in depth is delegated to `$EDITOR` (`$VISUAL` first; `+line` for vi-like
+  editors, `file:line` for helix). After the editor exits the view reloads.
+- Key sequences (`gg`, `dd`, `>>`, `<<`, `cw`) are buffered in `App.on_key`.
+- New notes from `a` follow the capture rule: with several lines, the first is the title.
 
 ## Development
 
@@ -140,17 +166,24 @@ cd server
 PYTHONPATH=src python3 -m unittest discover -s tests     # run tests
 PYTHONPATH=src python3 -m pa_server.cli serve            # run the server (~/pa)
 PYTHONPATH=src python3 -m pa_server.cli --root /tmp/x serve --port 47199
+
+cd clients/tui
+PYTHONPATH=src python3 -m unittest discover -s tests
+PYTHONPATH=src python3 -m pa_tui.todos [project]         # needs a running server
+
+pip install ./server ./clients/tui                       # installs pa-server, pa-todos, pa-notes
 ```
 
-Requires Python ≥ 3.11. No third-party dependencies.
+Requires Python ≥ 3.11. No third-party dependencies except `windows-curses` on Windows.
 
 ## Status / next
 
-- Done: core model, store + rollover, HTTP API, events, capture.
+- Done: core model, store + rollover, HTTP API, events, capture; TUI views for todos
+  and notes.
 - Next (proposed, not yet confirmed): `pa-server mcp`, a stdio MCP adapter for agents that forwards to the
   running server. Plan is to hand-write the small MCP subset needed (initialize,
   tools/list, tools/call) rather than use the SDK, to keep agent-spawned startup cheap
   under AV.
-- Later: TUI clients (vim keys, `$EDITOR` for editing), modal clients, optional Unix
-  socket listener, autostart/restart.
-- Undecided: final project name, language for clients.
+- Later: modal clients, optional Unix socket listener, autostart/restart, creating
+  projects from the TUI.
+- Undecided: final project name.
